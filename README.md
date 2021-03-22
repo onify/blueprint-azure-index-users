@@ -23,7 +23,7 @@ In order to index information from Microsoft Azure we need to setup a couple of 
 
 1. Register your app (platform must be set to native (Mobile and desktop applications))
 2. Configure permissions for Microsoft Graph (minimum `User.Read.All`)
-3. Get administrator consent (via https://login.microsoftonline.com/<TENANTID>/adminconsent?client_id=<CLIENTID>)
+3. Get administrator consent (via `https://login.microsoftonline.com/<TENANTID>/adminconsent?client_id=<CLIENTID>`)
 
 > For more information about setting up Microsoft Grpah/Azure API credentials, see https://docs.microsoft.com/en-us/graph/auth-v2-service.
 
