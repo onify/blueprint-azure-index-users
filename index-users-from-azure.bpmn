@@ -1,0 +1,239 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" id="Definitions_0sdny8d" targetNamespace="http://bpmn.io/schema/bpmn" exporter="Camunda Modeler" exporterVersion="4.5.0">
+  <bpmn:process id="index_users_azure" name="Onify Blueprint: Indexing Users from Microsoft Azure via Microsoft Graph" isExecutable="true">
+    <bpmn:startEvent id="start" name="Start">
+      <bpmn:outgoing>Flow_0wk332j</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:endEvent id="end" name="End">
+      <bpmn:incoming>Flow_0zjjwm4</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:serviceTask id="generateAccessToken" name="Generate Azure access token">
+      <bpmn:extensionElements>
+        <camunda:connector>
+          <camunda:inputOutput>
+            <camunda:inputParameter name="form">
+              <camunda:map>
+                <camunda:entry key="client_id">${environment.output.azureCredentials.client_id}</camunda:entry>
+                <camunda:entry key="scope">https://graph.microsoft.com/.default</camunda:entry>
+                <camunda:entry key="client_secret">${environment.output.azureCredentials.client_secret}</camunda:entry>
+                <camunda:entry key="grant_type">client_credentials</camunda:entry>
+              </camunda:map>
+            </camunda:inputParameter>
+            <camunda:inputParameter name="responseType">json</camunda:inputParameter>
+            <camunda:inputParameter name="method">POST</camunda:inputParameter>
+            <camunda:inputParameter name="headers">
+              <camunda:map>
+                <camunda:entry key="Content-Type">application/x-www-form-urlencoded</camunda:entry>
+              </camunda:map>
+            </camunda:inputParameter>
+            <camunda:inputParameter name="url">https://login.microsoftonline.com/${environment.output.azureCredentials.tenant}/oauth2/v2.0/token</camunda:inputParameter>
+            <camunda:outputParameter name="body">${body}</camunda:outputParameter>
+          </camunda:inputOutput>
+          <camunda:connectorId>httpRequest</camunda:connectorId>
+        </camunda:connector>
+        <camunda:inputOutput>
+          <camunda:outputParameter name="accessToken">${content.output.body.access_token}</camunda:outputParameter>
+        </camunda:inputOutput>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_0gaktxo</bpmn:incoming>
+      <bpmn:outgoing>Flow_0t7vdw4</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="Flow_0wk332j" sourceRef="start" targetRef="getAzureCredentials" />
+    <bpmn:serviceTask id="getUsers" name="Get users in Azure">
+      <bpmn:extensionElements>
+        <camunda:connector>
+          <camunda:inputOutput>
+            <camunda:inputParameter name="responseType">json</camunda:inputParameter>
+            <camunda:inputParameter name="headers">
+              <camunda:map>
+                <camunda:entry key="Authorization">Bearer ${environment.output.accessToken}</camunda:entry>
+              </camunda:map>
+            </camunda:inputParameter>
+            <camunda:inputParameter name="url">https://graph.microsoft.com/v1.0/users</camunda:inputParameter>
+            <camunda:outputParameter name="body">${body}</camunda:outputParameter>
+          </camunda:inputOutput>
+          <camunda:connectorId>httpRequest</camunda:connectorId>
+        </camunda:connector>
+        <camunda:inputOutput>
+          <camunda:outputParameter name="azureUsers">${content.output.body}</camunda:outputParameter>
+        </camunda:inputOutput>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_0t7vdw4</bpmn:incoming>
+      <bpmn:outgoing>Flow_0clf8pu</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="Flow_0t7vdw4" sourceRef="generateAccessToken" targetRef="getUsers" />
+    <bpmn:scriptTask id="transformUsers" name="Transform users to items" scriptFormat="javascript" camunda:resultVariable="userItems">
+      <bpmn:incoming>Flow_0clf8pu</bpmn:incoming>
+      <bpmn:outgoing>Flow_1lpaod8</bpmn:outgoing>
+      <bpmn:script>if (!environment.output.azureUsers.value) {
+    next(null, []);
+}
+
+const itemsToIndex = [];
+environment.output.azureUsers.value.forEach(async function(user) {
+    const itemToIndex = {
+        type: "user",
+        key: user.id.replace(/[-]/g, ''),
+        name: user.displayName,
+        tag: ["azure", "user"],
+        attribute: {
+            job_title: user.jobTitle,
+            mail: user.mail,
+            mobile_phone: user.mobilePhone,
+            office_location: user.officeLocation,
+            first_name: user.givenName,
+            last_name: user.surname,
+            _user_principal_name: user.userPrincipalName,
+            _id: user.id
+        }
+    };
+    itemsToIndex.push(itemToIndex);
+})
+
+next(null, itemsToIndex);</bpmn:script>
+    </bpmn:scriptTask>
+    <bpmn:serviceTask id="indexUsers" name="Bulk index items">
+      <bpmn:extensionElements>
+        <camunda:connector>
+          <camunda:inputOutput>
+            <camunda:inputParameter name="payload">${environment.output.userItems}</camunda:inputParameter>
+            <camunda:inputParameter name="method">POST</camunda:inputParameter>
+            <camunda:inputParameter name="url">/admin/bulk/items</camunda:inputParameter>
+          </camunda:inputOutput>
+          <camunda:connectorId>onifyApiRequest</camunda:connectorId>
+        </camunda:connector>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_1lpaod8</bpmn:incoming>
+      <bpmn:outgoing>Flow_0zjjwm4</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="Flow_0clf8pu" sourceRef="getUsers" targetRef="transformUsers" />
+    <bpmn:sequenceFlow id="Flow_1lpaod8" sourceRef="transformUsers" targetRef="indexUsers" />
+    <bpmn:sequenceFlow id="Flow_0zjjwm4" sourceRef="indexUsers" targetRef="end" />
+    <bpmn:serviceTask id="getAzureCredentials" name="Get Azure credentials">
+      <bpmn:extensionElements>
+        <camunda:connector>
+          <camunda:inputOutput>
+            <camunda:inputParameter name="url">/my/config/settings/_azure_credentials</camunda:inputParameter>
+          </camunda:inputOutput>
+          <camunda:connectorId>onifyApiRequest</camunda:connectorId>
+        </camunda:connector>
+        <camunda:inputOutput>
+          <camunda:outputParameter name="azureCredentials">${content.output.body.value}</camunda:outputParameter>
+        </camunda:inputOutput>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_0wk332j</bpmn:incoming>
+      <bpmn:outgoing>Flow_0gaktxo</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="Flow_0gaktxo" sourceRef="getAzureCredentials" targetRef="generateAccessToken" />
+    <bpmn:textAnnotation id="TextAnnotation_0kqo8ds">
+      <bpmn:text>Get Azure credentials from settings</bpmn:text>
+    </bpmn:textAnnotation>
+    <bpmn:association id="Association_1300fi8" sourceRef="getAzureCredentials" targetRef="TextAnnotation_0kqo8ds" />
+    <bpmn:textAnnotation id="TextAnnotation_1iucwau">
+      <bpmn:text>Generate OAuth 2.0 access token</bpmn:text>
+    </bpmn:textAnnotation>
+    <bpmn:association id="Association_0qvrl29" sourceRef="generateAccessToken" targetRef="TextAnnotation_1iucwau" />
+    <bpmn:textAnnotation id="TextAnnotation_0tr627x">
+      <bpmn:text>Get users via Microsoft Graph API</bpmn:text>
+    </bpmn:textAnnotation>
+    <bpmn:association id="Association_0p7kois" sourceRef="getUsers" targetRef="TextAnnotation_0tr627x" />
+    <bpmn:textAnnotation id="TextAnnotation_0qk12fu">
+      <bpmn:text>Transform users from Azure AD to items</bpmn:text>
+    </bpmn:textAnnotation>
+    <bpmn:association id="Association_05ypw1y" sourceRef="transformUsers" targetRef="TextAnnotation_0qk12fu" />
+    <bpmn:textAnnotation id="TextAnnotation_1xdrv2d">
+      <bpmn:text>Index users into Onify</bpmn:text>
+    </bpmn:textAnnotation>
+    <bpmn:association id="Association_12o0gd2" sourceRef="indexUsers" targetRef="TextAnnotation_1xdrv2d" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_1">
+    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="index_users_azure">
+      <bpmndi:BPMNShape id="TextAnnotation_0kqo8ds_di" bpmnElement="TextAnnotation_0kqo8ds">
+        <dc:Bounds x="380" y="100" width="140" height="40" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="TextAnnotation_1iucwau_di" bpmnElement="TextAnnotation_1iucwau">
+        <dc:Bounds x="500" y="320" width="140" height="40" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="TextAnnotation_0tr627x_di" bpmnElement="TextAnnotation_0tr627x">
+        <dc:Bounds x="730" y="100" width="130" height="40" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="TextAnnotation_0qk12fu_di" bpmnElement="TextAnnotation_0qk12fu">
+        <dc:Bounds x="860" y="322" width="140" height="38" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="TextAnnotation_1xdrv2d_di" bpmnElement="TextAnnotation_1xdrv2d">
+        <dc:Bounds x="1060" y="105" width="140" height="30" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_0wk332j_di" bpmnElement="Flow_0wk332j">
+        <di:waypoint x="188" y="227" />
+        <di:waypoint x="280" y="227" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_0gaktxo_di" bpmnElement="Flow_0gaktxo">
+        <di:waypoint x="380" y="227" />
+        <di:waypoint x="456" y="227" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_0zjjwm4_di" bpmnElement="Flow_0zjjwm4">
+        <di:waypoint x="1060" y="227" />
+        <di:waypoint x="1122" y="227" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_0t7vdw4_di" bpmnElement="Flow_0t7vdw4">
+        <di:waypoint x="556" y="227" />
+        <di:waypoint x="626" y="227" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_0clf8pu_di" bpmnElement="Flow_0clf8pu">
+        <di:waypoint x="726" y="227" />
+        <di:waypoint x="796" y="227" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_1lpaod8_di" bpmnElement="Flow_1lpaod8">
+        <di:waypoint x="896" y="227" />
+        <di:waypoint x="960" y="227" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="_BPMNShape_StartEvent_2" bpmnElement="start">
+        <dc:Bounds x="152" y="209" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="158" y="252" width="24" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_02vz536_di" bpmnElement="getAzureCredentials">
+        <dc:Bounds x="280" y="187" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_1mbrrq0_di" bpmnElement="generateAccessToken">
+        <dc:Bounds x="456" y="187" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_1kxqzcb_di" bpmnElement="getUsers">
+        <dc:Bounds x="626" y="187" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_0v82xsa_di" bpmnElement="transformUsers">
+        <dc:Bounds x="796" y="187" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_03ti1bi_di" bpmnElement="indexUsers">
+        <dc:Bounds x="960" y="187" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Event_10fxhsy_di" bpmnElement="end">
+        <dc:Bounds x="1122" y="209" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1130" y="252" width="20" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Association_1300fi8_di" bpmnElement="Association_1300fi8">
+        <di:waypoint x="366" y="187" />
+        <di:waypoint x="408" y="140" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Association_0qvrl29_di" bpmnElement="Association_0qvrl29">
+        <di:waypoint x="522" y="267" />
+        <di:waypoint x="544" y="320" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Association_0p7kois_di" bpmnElement="Association_0p7kois">
+        <di:waypoint x="713" y="187" />
+        <di:waypoint x="757" y="140" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Association_05ypw1y_di" bpmnElement="Association_05ypw1y">
+        <di:waypoint x="869" y="267" />
+        <di:waypoint x="901" y="322" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Association_12o0gd2_di" bpmnElement="Association_12o0gd2">
+        <di:waypoint x="1047" y="187" />
+        <di:waypoint x="1096" y="135" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>
