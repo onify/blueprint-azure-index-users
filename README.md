@@ -30,6 +30,7 @@ In order to index information from Microsoft Azure we need to setup a couple of 
 ### Settings
 
 Add the following setting(s) to Onify.
+
 _Replace `<TENANT>`, `<CLIENTID>` and `<CLIENTSECRET>` with correct values._
 
 ```json
