@@ -4,7 +4,7 @@
 
 # Onify Blueprint: Indexing Users from Microsoft Azure AD via Microsoft Graph
 
-Want to get information from Microsoft Azure into Onify. It is easy! By using Microsoft Graph API we can read/write from/to Azure. Here we show how we can index users from Azure AD and create items. All you need to do is create actions and processes to get the automation part working :)
+Want to get information from Microsoft Azure into Onify? It is easy! By using Microsoft Graph API we can read/write from/to Azure. Here we show how we can index users from Azure AD and create items. All you need to do is create actions and processes to get the automation part working :)
 
 ![alt text](flow.png "Flow")
 
